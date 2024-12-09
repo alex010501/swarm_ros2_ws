@@ -1,0 +1,10 @@
+robot:
+    wheel_radius: 0.1
+    robot_length: 0.456
+    robot_width: 0.316
+    Kp_pos: 1.0
+    Ki_pos: 0.1
+    Kd_pos: 0.1
+    Kp_yaw: 1.0
+    Ki_yaw: 0.0
+    Kd_yaw: 0.1

@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <link name="link4_part1">
+    <visual>
+      <geometry>
+        <cylinder length="0.02" radius="0.025"/>
+      </geometry>
+      <origin xyz="0.01 0 0" rpy="0 1.57075 0"/>
+      <material name="orange"/>
+    </visual>
+  </link>
+
+  <link name="link4_part2">
+    <visual>
+      <geometry>
+        <box size="0.06 0.04 0.059"/>
+      </geometry>
+      <origin xyz="0 0 0.0295" rpy="0 0 0"/>
+      <material name="orange"/>
+    </visual>
+  </link>
+
+  <joint name="link4_fixed" type="fixed">
+    <parent link="link4_part1"/>
+    <child link="link4_part2"/>
+    <origin xyz="0 0 0.025" rpy="0 0 0"/>
+  </joint>
+</robot>
