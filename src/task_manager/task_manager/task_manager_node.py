@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+from task_msg.msg import TaskArray, Task
 from geometry_msgs.msg import Point32
 from sensor_msgs.msg import PointCloud
 from std_msgs.msg import String, Int32
@@ -17,19 +18,13 @@ class TaskManagerNode(Node):
         self.create_subscription(PointCloud, '/add_task', self.add_task_callback, 10)
         self.create_subscription(String, '/update_task_status', self.update_task_status_callback, 10)
 
-        # Таймер для публикации статусов
-        self.create_timer(1.0, self.publish_task_statuses)
+        # Издатели
+        self.task_array_publisher = self.create_publisher(TaskArray, '/robot_tasks', 10)
+        self.create_timer(1.0, self.publish_task_array)
 
     def add_task_callback(self, msg: PointCloud):
-        """Добавить задачу и опубликовать её по отдельному топику."""
+        """Добавить задачу."""
         task = self.task_storage.add_task(msg)
-
-        # Публикация траектории задачи
-        self.create_publisher(PointCloud, f'/task_{task.task_id}', 10).publish(msg)
-
-        # Публикация статуса задачи
-        self.create_publisher(Int32, f'/status_task_{task.task_id}', 10).publish(Int32(data=task.status))
-
         self.get_logger().info(f'Added task {task.task_id} with {len(msg.points)} points.')
 
     def update_task_status_callback(self, msg: String):
@@ -54,8 +49,35 @@ class TaskManagerNode(Node):
             self.get_logger().error(f"Failed to parse update_task_status message: {msg.data}. Error: {e}")
 
 
-    def publish_task_statuses(self):
-        """Публикация статусов всех задач."""
-        for task in self.task_storage.get_all_tasks():
-            publisher = self.create_publisher(Int32, f'/status_task_{task.task_id}', 10)
-            publisher.publish(Int32(data=task.status))
+    def publish_task_array(self):
+        """Публиковать все задачи."""
+        task_array = self.task_storage.get_all_tasks()
+        self.task_array_publisher.publish(task_array)
+        self.get_logger().info(f'Published {len(task_array.tasks)} tasks.')
+
+        # Publish PointCloud for RViz
+        for task in task_array.tasks:
+            topic_name = f'/task_{task.task_id}_cloud'
+
+            if topic_name not in self.point_cloud_publishers:
+                self.point_cloud_publishers[topic_name] = self.create_publisher(PointCloud, topic_name, 10)
+
+            self.point_cloud_publishers[topic_name].publish(task.point_cloud)
+
+            self.get_logger().info(f'Published task {task.task_id} with {len(task.point_cloud.points)} points.')
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = TaskManagerNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

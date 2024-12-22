@@ -37,5 +37,6 @@ def create_point_cloud(interpolated_points):
     :return: PointCloud.
     """
     point_cloud = PointCloud()
+    point_cloud.header.frame_id = 'world'
     point_cloud.points = interpolated_points
     return point_cloud

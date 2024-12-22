@@ -1,145 +1,181 @@
+import math
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Pose, Point, PoseStamped
-from std_msgs.msg import Int32, String
-from sensor_msgs.msg import PointCloud
+from geometry_msgs.msg import Pose, Point
+from std_msgs.msg import String
+from task_msg.msg import TaskArray
+import tf2_geometry_msgs
 import smach
-import rclpy
-from time import time
-from threading import Timer
+import smach_ros
 
-class YoubotControl(Node):
-    ROBOT_STATES = {
-        "Waiting": 0,
-        "MovingToTask": 1,
-        "ExecutingTask": 2
-    }
+from auction_algorithm import Auction  # Предполагается, что алгоритм аукциона реализован в этом модуле
 
-    TASK_STATES = {
-        "Waiting": 0,
-        "MovingToTask": 1,
-        "ExecutingTask": 2
-    }
-
+class RobotNode(Node):
     def __init__(self, robot_id):
-        super().__init__('robot_controller_node_' + robot_id)
+        super().__init__(f'robot_{robot_id}')
         self.robot_id = robot_id
-        self.state = "Waiting"
+        self.current_pose = Pose()
+        self.current_tcp_pose = Pose()
+        self.robot_positions = {}
+        self.tasks = []
         self.current_task = None
-        self.tasks = {}
-        self.other_robot_states = {}
-        self.last_task_update_time = {}
+        self.trajectory = []
 
-        # Подписчики
-        self.create_subscription(PointCloud, f'/task_+', self.task_callback, 10)
-        self.create_subscription(String, '/update_task_status', self.task_status_callback, 10)
-        self.create_subscription(Pose, f'/{self.robot_id}/robot_pose', self.pose_callback, 10)
-        self.create_subscription(String, '/robot_states', self.robot_state_callback, 10)
+        # Публикация и подписка для тележки
+        self.platform_pose_publisher = self.create_publisher(Pose, f'/robot_{robot_id}/target_pose', 10)
+        self.create_subscription(Pose, f'/robot_{robot_id}/robot_pose', self.update_platform_pose, 10)
 
-        # Публикаторы
-        self.state_publisher = self.create_publisher(String, '/robot_states', 10)
-        self.target_cart_publisher = self.create_publisher(Pose, f'/{self.robot_id}/target_pose', 10)
-        self.target_arm_publisher = self.create_publisher(Pose, f'/{self.robot_id}/arm_pose', 10)
+        # Публикация и подписка для манипулятора
+        self.tcp_pose_publisher = self.create_publisher(Pose, f'/robot_{robot_id}/target_arm_pose', 10)
+        self.create_subscription(Pose, f'/robot_{robot_id}/tcp_pose_feedback', self.update_tcp_pose, 10)
+
+        # Подписка на задачи
+        self.create_subscription(TaskArray, '/tasks', self.update_tasks, 10)
+
+        # Публикация статуса задач
         self.task_status_publisher = self.create_publisher(String, '/update_task_status', 10)
 
-        # Таймер публикации состояния робота
-        self.create_timer(1.0, self.publish_state)
+        # Публикация состояния машины состояний
+        self.state_publisher = self.create_publisher(String, f'/robot_{robot_id}/state', 10)
 
-        # Параметры робота
-        self.robot_pose = None  # Текущее положение
-        self.step_time = 0.1    # Частота обновления позиции
-        self.task_check_timer = None
+        # Таймер для публикации текущего положения
+        self.create_timer(0.1, self.update)
 
-    def task_callback(self, msg):
-        """Получение новой задачи."""
-        task_id = int(msg.header.frame_id.split("_")[1])  # Извлекаем ID задачи
-        if task_id not in self.tasks:
-            self.tasks[task_id] = msg
-            self.get_logger().info(f"Received task {task_id}.")
+        # Инициализация машины состояний
+        self.sm = self.create_state_machine()
 
-    def task_status_callback(self, msg):
-        """Обновление статуса задачи."""
-        data = msg.data.split(',')
-        task_id, status = int(data[0]), int(data[1])
-        if task_id in self.tasks:
-            self.tasks[task_id].status = status
-            if status == 2:  # Если задача завершена
-                self.tasks.pop(task_id, None)
-                self.get_logger().info(f"Task {task_id} completed and removed.")
+    def update_platform_pose(self, pose_msg):
+        """Обновление положения платформы."""
+        self.current_pose = pose_msg
 
-    def pose_callback(self, msg):
-        """Обновление текущей позиции робота."""
-        self.robot_pose = msg
+    def update_tcp_pose(self, pose_msg):
+        """Обновление положения TCP манипулятора."""
+        self.current_tcp_pose = pose_msg
 
-    def robot_state_callback(self, msg):
-        """Обновление состояний других роботов."""
-        data = msg.data.split(',')
-        robot_id, state = data[0], data[1]
-        self.other_robot_states[robot_id] = state
-
-    def publish_state(self):
-        """Публикация текущего состояния робота."""
-        self.state_publisher.publish(String(data=f"{self.robot_id},{self.state}"))
-
-    def select_task(self):
-        """Выбор задачи через аукцион."""
-        if self.state != "Waiting" or not self.tasks:
-            return
-
-        min_distance = float('inf')
-        selected_task = None
-        for task_id, task in self.tasks.items():
-            if task.status != 0:  # Только задачи со статусом "инициализирована"
-                continue
-            task_position = task.points[0]
-            distance = self.calculate_distance(self.robot_pose.position, task_position)
-            if distance < min_distance:
-                min_distance = distance
-                selected_task = task_id
-
-        if selected_task is not None:
-            self.current_task = selected_task
-            self.state = "MovingToTask"
-            self.update_task_status(selected_task, 1)
-            self.get_logger().info(f"Task {selected_task} selected. Moving to task.")
+    def update_tasks(self, task_array_msg):
+        """Обновление списка задач."""
+        self.tasks = task_array_msg.tasks
 
     def update_task_status(self, task_id, status):
-        """Обновление статуса задачи."""
+        """Публикация статуса задачи."""
         self.task_status_publisher.publish(String(data=f"{task_id},{status}"))
+        self.get_logger().info(f"Updated task {task_id} to status {status}.")
 
-    def calculate_distance(self, pose1, pose2):
-        """Вычисление Евклидова расстояния между двумя точками."""
-        return ((pose1.x - pose2.x)**2 + (pose1.y - pose2.y)**2 + (pose1.z - pose2.z)**2) ** 0.5
+    def transform_to_local_frame(self, global_point: Pose) -> Pose:
+        """Преобразование точки из глобальной системы координат в локальную."""
+        tf_buffer = tf2_ros.Buffer()
+        tf_listener = tf2_ros.TransformListener(tf_buffer, self)
+        transform = tf_buffer.lookup_transform(
+            target_frame=f'robot_{self.robot_id}/base_link',
+            source_frame='map',
+            time=rclpy.time.Time())
+        local_point = tf_buffer.transform(global_point, f'robot_{self.robot_id}/base_link')
+        return local_point
 
-    def execute_task(self):
-        """Выполнение задачи."""
-        if self.state != "ExecutingTask" or self.current_task is None:
-            return
+    def create_state_machine(self):
+        """Создание и настройка машины состояний."""
+        sm = smach.StateMachine(outcomes=['mission_completed', 'mission_failed'])
 
-        task = self.tasks[self.current_task]
-        for point in task.points:
-            cart_pose = self.calculate_cart_pose(point)
-            arm_pose = self.calculate_arm_pose(point)
-            self.target_cart_publisher.publish(cart_pose)
-            self.target_arm_publisher.publish(arm_pose)
-            time.sleep(self.step_time)
+        with sm:
+            smach.StateMachine.add('IDLE', IdleState(self),
+                                   transitions={'task_available': 'MOVE_TO_TASK',
+                                                'no_task': 'mission_completed'})
+            smach.StateMachine.add('MOVE_TO_TASK', MoveToTaskState(self),
+                                   transitions={'reached_task': 'EXECUTE_TASK',
+                                                'task_failed': 'IDLE'})
+            smach.StateMachine.add('EXECUTE_TASK', ExecuteTaskState(self),
+                                   transitions={'task_completed': 'IDLE',
+                                                'execution_failed': 'IDLE'})
+        return sm
 
-        self.update_task_status(self.current_task, 2)  # Завершаем задачу
-        self.state = "Waiting"
-        self.current_task = None
+    def run(self):
+        """Запуск машины состояний."""
+        self.get_logger().info("Starting state machine...")
+        self.sm.execute()
 
-    def calculate_cart_pose(self, point):
-        """Рассчитать положение тележки относительно точки траектории."""
-        cart_pose = Pose()
-        cart_pose.position.x = point.x - 0.5  # Тележка находится чуть позади точки
-        cart_pose.position.y = point.y
-        cart_pose.position.z = 0  # На полу
-        cart_pose.orientation.w = 1.0  # Без поворота
-        return cart_pose
 
-    def calculate_arm_pose(self, point):
-        """Рассчитать положение TCP манипулятора относительно точки."""
-        arm_pose = Pose()
-        arm_pose.position = point  # Манипулятор в точке траектории
-        arm_pose.orientation.w = 1.0  # Без поворота
-        return arm_pose
+# Определения состояний
+class IdleState(smach.State):
+    def __init__(self, robot_node):
+        smach.State.__init__(self, outcomes=['task_available', 'no_task'])
+        self.robot_node = robot_node
+        self.auction = Auction(robot_node.robot_id, self.robot_node.get_logger())
+
+    def execute(self, userdata):
+        self.robot_node.get_logger().info("Robot is idle, checking for tasks...")
+        if not self.robot_node.tasks:
+            return 'no_task'
+
+        task_allocations = self.auction.run_auction(
+            self.robot_node.robot_positions,
+            self.robot_node.current_pose,
+            self.robot_node.tasks
+        )
+
+        if self.robot_node.robot_id in task_allocations:
+            task_id = task_allocations[self.robot_node.robot_id]
+            self.robot_node.current_task = task_id
+            self.robot_node.update_task_status(task_id, 1)
+            return 'task_available'
+        return 'no_task'
+
+
+class MoveToTaskState(smach.State):
+    def __init__(self, robot_node):
+        smach.State.__init__(self, outcomes=['reached_task', 'task_failed'])
+        self.robot_node = robot_node
+
+    def execute(self, userdata):
+        self.robot_node.get_logger().info("Moving to task...")
+        if not self.robot_node.trajectory:
+            return 'reached_task'
+        next_point = self.robot_node.trajectory.pop(0)
+        next_pose = Pose()
+        next_pose.position = next_point
+        self.robot_node.platform_pose_publisher.publish(next_pose)
+        return 'reached_task'
+
+
+class ExecuteTaskState(smach.State):
+    def __init__(self, robot_node):
+        smach.State.__init__(self, outcomes=['task_completed', 'execution_failed'])
+        self.robot_node = robot_node
+
+    def execute(self, userdata):
+        self.robot_node.get_logger().info("Executing task...")
+        for point in self.robot_node.tasks:
+            local_point = self.robot_node.transform_to_local_frame(point)
+            tcp_target_pose = Pose()
+            tcp_target_pose.position = local_point
+            self.robot_node.tcp_pose_publisher.publish(tcp_target_pose)
+        self.robot_node.update_task_status(self.robot_node.current_task, 2)
+        return 'task_completed'
+
+
+def main(args):
+    # Get robot ID from command line arguments
+    if len(args) < 2:
+        print("Usage: python your_script.py <robot_id>")
+        return
+
+    # Инициализация ROS
+    rclpy.init(args=args)
+
+    # Создание узла робота
+    robot_id = args[1]
+    robot_node = RobotNode(robot_id)
+
+    # Запуск сервера для отслеживания машины состояний
+    smach_ros.IntrospectionServer('smach_server', robot_node.sm, '/SM_ROOT').start() 
+
+    try:
+        robot_node.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        robot_node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

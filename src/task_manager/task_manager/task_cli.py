@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+from task_msg.msg import Task, TaskArray
 from sensor_msgs.msg import PointCloud
 from geometry_msgs.msg import Point32
 from utils import interpolate_points, create_point_cloud
