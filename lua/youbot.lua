@@ -20,15 +20,18 @@ function sysCall_init()
 
     -- Get handles of arm joints
     armJoints = {
-        sim.getObject('./ang_joint1'),
-        sim.getObject('./ang_joint2'),
-        sim.getObject('./ang_joint3'),
-        sim.getObject('./ang_joint4'),
-        sim.getObject('./ang_joint5')
+        sim.getObject('./arm_joint1'),
+        sim.getObject('./arm_joint2'),
+        sim.getObject('./arm_joint3'),
+        sim.getObject('./arm_joint4'),
+        sim.getObject('./arm_joint5')
     }
 
     -- Get handle of robot base
-    robotBase = sim.getObject('.')
+    robotBase = sim.getObject('youBot_ref')
+    
+    -- Get handle of robot base
+    TCP = sim.getObject('arm_TCP')
 
     -- Create publishers and subscribers    
     wheelVelSub = simROS2.createSubscription(wheel_velocities_topic, 'std_msgs/Float64MultiArray', 'wheelVelCallback')
