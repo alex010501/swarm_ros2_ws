@@ -18,20 +18,23 @@ ArmControl::ArmControl(const rclcpp::NodeOptions &options):
         joint_topic, 10, std::bind(&ArmControl::jointCallback, this, std::placeholders::_1));
 
 
-    control_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(control_topic, 10);
+    control_pub_ = this->create_publisher<sensor_msgs::msg::JointState>(control_topic, 10);
 }
 
 void ArmControl::commandCallback(const geometry_msgs::msg::Pose::SharedPtr msg)
 {
     Eigen::VectorXd q = arm_.solveIK(*msg, joint_angles, 5);
 
-    std_msgs::msg::Float64MultiArray msg_pub;
-    msg_pub.data.resize(q.size());
+    sensor_msgs::msg::JointState msg_pub;
 
+    // Заполнение данных для позиции суставов
+    msg_pub.position.resize(q.size());  // Устанавливаем размер массива для позиций
     for (int i = 0; i < q.size(); i++)
-        msg_pub.data[i] = q[i];
+        msg_pub.position[i] = q[i];  // Заполняем позиции суставов значениями из q
 
-    control_pub_->publish(msg_pub);
+    // При необходимости, можно добавить скорости и усилия (если нужно):
+    msg_pub.velocity.resize(q.size(), 0.0);  // Если хотите отправить скорости, заполняем нулями
+    msg_pub.effort.resize(q.size(), 0.0); 
 }
 
 void ArmControl::jointCallback(const sensor_msgs::msg::JointState::SharedPtr msg)

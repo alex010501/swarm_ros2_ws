@@ -6,7 +6,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
-#include <std_msgs/msg/float64_multi_array.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 class CartControl : public rclcpp::Node
@@ -26,7 +26,7 @@ private:
     // Publishers and Subscribers
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr target_pose_sub;
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr current_pose_sub;
-    rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr wheel_vel_pub;
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr wheel_vel_pub;
 
     // Robot and control parameters
     double wheel_radius;

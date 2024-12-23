@@ -27,7 +27,7 @@ CartControl::CartControl(const rclcpp::NodeOptions &options)
         target_pose_topic, 10, std::bind(&CartControl::targetPoseCallback, this, std::placeholders::_1));
     current_pose_sub = this->create_subscription<geometry_msgs::msg::Pose>(
         current_pose_topic, 10, std::bind(&CartControl::currentPoseCallback, this, std::placeholders::_1));
-    wheel_vel_pub = this->create_publisher<std_msgs::msg::Float64MultiArray>(wheel_vel_topic, 10);
+    wheel_vel_pub = this->create_publisher<sensor_msgs::msg::JointState>(wheel_vel_topic, 10);
 
     // Timer for control loop
     control_timer = this->create_wall_timer(
@@ -85,8 +85,14 @@ void CartControl::computeControl()
     std::vector<double> wheel_speeds = calculateWheelSpeeds(velocity, 0.0, angular_velocity);
 
     // Publish wheel speeds
-    std_msgs::msg::Float64MultiArray wheel_vel_msg;
-    wheel_vel_msg.data = wheel_speeds;
+    sensor_msgs::msg::JointState wheel_vel_msg;
+    wheel_vel_msg.velocity.resize(wheel_speeds.size());  // Устанавливаем размер массива для скоростей колес
+
+    // Заполняем массив скоростей
+    for (size_t i = 0; i < wheel_speeds.size(); ++i)
+        wheel_vel_msg.velocity[i] = wheel_speeds[i];  // Заполняем скорости из массива wheel_speeds
+
+    // Публикация сообщения
     wheel_vel_pub->publish(wheel_vel_msg);
 
     RCLCPP_INFO(this->get_logger(),
