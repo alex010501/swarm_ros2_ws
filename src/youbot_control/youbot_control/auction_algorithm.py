@@ -1,111 +1,111 @@
-import math
-from typing import List, Dict, Tuple
+import itertools
+import numpy as np
 from geometry_msgs.msg import Pose, Point
+from std_msgs.msg import String
+from task_msg.msg import Task
 
-class Auction:
-    def __init__(self, robot_id: str, robots_positions: Dict[str, Pose], task_list: List[Dict]):
-        """
-        :param robot_id: ID текущего робота
-        :param robots_positions: Словарь позиций всех роботов {robot_id: Pose}
-        :param task_list: Список задач [{"task_id": str, "start_point": Point, "trajectory": List[Point]}]
-        """
-        self.robot_id = robot_id
-        self.robots_positions = robots_positions
-        self.task_list = task_list
+def euclidean_distance(pos1: np.array, pos2: np.array) -> float:
+    """Вычисляет евклидово расстояние между двумя точками."""
+    return np.linalg.norm(pos1 - pos2)
 
-    def calculate_cost(self, current_position: Pose, task_start: Point) -> float:
-        """
-        Рассчитывает стоимость задачи как длину пути до начальной точки.
-        :param current_position: Текущее положение робота
-        :param task_start: Начальная точка задачи
-        :return: Стоимость выполнения задачи
-        """
-        dx = current_position.position.x - task_start.x
-        dy = current_position.position.y - task_start.y
-        return math.sqrt(dx**2 + dy**2)
+def paths_intersect(path1: list[np.array], path2: list[np.array]) -> bool:
+    """Проверяет, пересекаются ли два пути."""
+    for i in range(len(path1) - 1):
+        for j in range(len(path2) - 1):
+            if segments_intersect(path1[i], path1[i + 1], path2[j], path2[j + 1]):
+                return True
+    return False
 
-    def is_collision_free(self, trajectory: List[Point], other_trajectories: List[List[Point]]) -> bool:
-        """
-        Проверяет, пересекается ли траектория с другими траекториями.
-        :param trajectory: Траектория текущего робота
-        :param other_trajectories: Список траекторий других роботов
-        :return: True, если пересечений нет, иначе False
-        """
-        safety_distance = 0.5  # Минимальное безопасное расстояние
-        for other_trajectory in other_trajectories:
-            for p1 in trajectory:
-                for p2 in other_trajectory:
-                    dist = math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2)
-                    if dist < safety_distance:
-                        return False
+def segments_intersect(p1: np.array, q1: np.array, p2: np.array, q2: np.array) -> bool:
+    """Проверяет, пересекаются ли два отрезка."""
+    def orientation(a: np.array, b: np.array, c: np.array) -> int:
+        val = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1])
+        if val == 0:
+            return 0  # Коллинеарны
+        return 1 if val > 0 else 2  # По часовой стрелке или против
+
+    def on_segment(a: np.array, b: np.array, c: np.array) -> bool:
+        return min(a[0], b[0]) <= c[0] <= max(a[0], b[0]) and min(a[1], b[1]) <= c[1] <= max(a[1], b[1])
+
+    o1 = orientation(p1, q1, p2)
+    o2 = orientation(p1, q1, q2)
+    o3 = orientation(p2, q2, p1)
+    o4 = orientation(p2, q2, q1)
+
+    if o1 != o2 and o3 != o4:
         return True
 
-    def plan_trajectory(self, start: Point, goal: Point) -> List[Point]:
-        """
-        Простое планирование траектории движения по прямой линии.
-        :param start: Начальная точка
-        :param goal: Конечная точка
-        :return: Список точек траектории
-        """
-        steps = 20
-        trajectory = []
-        for i in range(steps + 1):
-            t = i / steps
-            point = Point()
-            point.x = start.x + t * (goal.x - start.x)
-            point.y = start.y + t * (goal.y - start.y)
-            point.z = 0.0
-            trajectory.append(point)
-        return trajectory
+    if o1 == 0 and on_segment(p1, q1, p2):
+        return True
+    if o2 == 0 and on_segment(p1, q1, q2):
+        return True
+    if o3 == 0 and on_segment(p2, q2, p1):
+        return True
+    if o4 == 0 and on_segment(p2, q2, q1):
+        return True
 
-    def run_auction(self) -> Tuple[str, List[Point]]:
-        """
-        Выполняет алгоритм аукциона для выбора задачи.
-        :return: ID выбранной задачи и траектория до начальной точки задачи
-        """
-        current_position = self.robots_positions[self.robot_id]
-        other_trajectories = []
+    return False
 
-        # Сбор траекторий других роботов
-        for other_robot_id, position in self.robots_positions.items():
-            if other_robot_id == self.robot_id:
-                continue
-            other_trajectory = self.plan_trajectory(
-                start=position.position,
-                goal=Point(x=position.position.x, y=position.position.y, z=0.0)  # Предположим, они стоят
-            )
-            other_trajectories.append(other_trajectory)
+def robots_auction(robots_id: list[str], robots_pos: list[Pose], task_list: list[Task]) -> list[tuple[str, Task]]:
+    """
+    Распределяет задачи между роботами с минимизацией суммарного пути и проверкой пересечения путей.
 
-        best_task_id = None
-        best_cost = float('inf')
-        best_trajectory = []
+    :param robots_id: Список ID роботов
+    :param robots_pos: Список текущих положений роботов
+    :param task_list: Список задач
+    :return: Список пар (robot_id, task_id), если задача не назначена, то task_id=None
+    """
 
-        # Анализ доступных задач
-        for task in self.task_list:
-            task_id = task["task_id"]
-            start_point = task["start_point"]
+    # Преобразуем положение роботов в вектор формата (x, y)
+    robots_coords: list[np.array] = []
+    for pos in robots_pos:
+        coord = np.array([pos.position.x, pos.position.y])
+        robots_coords.append(coord)
+    
+    task_coords: list[np.array] = []
+    for task in task_list:
+        coord = np.array([task.start_point.x, task.start_point.y])
+        task_coords.append(coord)
 
-            # Планирование траектории до начальной точки задачи
-            trajectory_to_task = self.plan_trajectory(
-                start=Point(
-                    x=current_position.position.x,
-                    y=current_position.position.y,
-                    z=0.0
-                ),
-                goal=start_point
-            )
+    
+    num_robots = len(robots_id)
+    num_tasks = len(task_list)
 
-            # Проверка на коллизии
-            if not self.is_collision_free(trajectory_to_task, other_trajectories):
-                continue
+    # Генерация всех возможных распределений задач между роботами
+    all_assignments = list(itertools.permutations(range(num_tasks), num_robots))
+    best_assignment = None
+    best_total_distance = float('inf')
 
-            # Расчет стоимости
-            cost = self.calculate_cost(current_position, start_point)
 
-            # Выбор задачи с минимальной стоимостью
-            if cost < best_cost:
-                best_task_id = task_id
-                best_cost = cost
-                best_trajectory = trajectory_to_task
+    for assignment in all_assignments:
+        total_distance = 0
+        paths = []
+        valid_assignment = True
 
-        return best_task_id, best_trajectory
+        for robot_idx, task_idx in enumerate(assignment):
+            start = robots_coords[robot_idx]
+            end = task_coords[task_idx]
+            path = [start, end]
+
+            # Проверяем пересечение с другими путями
+            if any(paths_intersect(path, other_path) for other_path in paths):
+                valid_assignment = False
+                break
+
+            paths.append(path)
+            total_distance += euclidean_distance(start, end)
+
+        if valid_assignment and total_distance < best_total_distance:
+            best_total_distance = total_distance
+            best_assignment = assignment
+
+    # Формируем результат
+    result = []
+    for robot_idx, robot_id in enumerate(robots_id):
+        if best_assignment and robot_idx < len(best_assignment):
+            task_idx = best_assignment[robot_idx]
+            result.append((robot_id, task_list[task_idx]))
+        else:
+            result.append((robot_id, None))
+
+    return result

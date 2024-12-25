@@ -4,7 +4,7 @@ function sysCall_init()
     simROS2 = require 'simROS2'
 
     -- Set ROS2 topics by id
-    id = 0001
+    id = '0001'
     robot_pose_topic = '/robot_' .. id .. '/robot_pose'
     arm_joint_states_topic = '/robot_' .. id .. '/arm_joint_states'
     arm_joint_commands_topic = '/robot_' .. id .. '/arm_joint_commands'
@@ -12,45 +12,57 @@ function sysCall_init()
 
     -- Get handles of wheel joints
     wheelJoints = {
-        sim.getObject('./rollingJoint_fl'),
-        sim.getObject('./rollingJoint_rl'),
-        sim.getObject('./rollingJoint_rr'),
-        sim.getObject('./rollingJoint_fr')
+        sim.getObject('./../rollingJoint_fl'),
+        sim.getObject('./../rollingJoint_rl'),
+        sim.getObject('./../rollingJoint_rr'),
+        sim.getObject('./../rollingJoint_fr')
     }
 
     -- Get handles of arm joints
     armJoints = {
-        sim.getObject('./arm_joint1'),
-        sim.getObject('./arm_joint2'),
-        sim.getObject('./arm_joint3'),
-        sim.getObject('./arm_joint4'),
-        sim.getObject('./arm_joint5')
+        sim.getObject('./../arm_joint1'),
+        sim.getObject('./../arm_joint2'),
+        sim.getObject('./../arm_joint3'),
+        sim.getObject('./../arm_joint4'),
+        sim.getObject('./../arm_joint5')
     }
 
     -- Get handle of robot base
-    robotBase = sim.getObject('youBot_ref')
+    robotBase = sim.getObject('./../youBot_ref')
     
     -- Get handle of robot base
-    TCP = sim.getObject('arm_TCP')
+    TCP = sim.getObject('./../arm_TCP')
 
     -- Create publishers and subscribers    
-    wheelVelSub = simROS2.createSubscription(wheel_velocities_topic, 'std_msgs/Float64MultiArray', 'wheelVelCallback')
-    jointCmdSub = simROS2.createSubscription(joint_commands_topic, 'std_msgs/Float64MultiArray', 'jointCmdCallback')
-    jointStatePub = simROS2.createPublisher(joint_states_topic, 'sensor_msgs/JointState')
-    posePub = simROS2.createPublisher(robot_pose_topic, 'geometry_msgs/Pose')
+    wheelVelSub = simROS2.createSubscription(wheel_velocities_topic, 'sensor_msgs/msg/JointState', 'wheelVelCallback')
+    jointCmdSub = simROS2.createSubscription(arm_joint_commands_topic, 'sensor_msgs/msg/JointState', 'jointCmdCallback')
+    jointStatePub = simROS2.createPublisher(arm_joint_states_topic, 'sensor_msgs/msg/JointState')
+    posePub = simROS2.createPublisher(robot_pose_topic, 'geometry_msgs/msg/Pose')
 end
 
--- Handler for wheel velocities
+-- Handler for wheel velocities (Using JointState message)
 function wheelVelCallback(msg)
+    -- msg.position and msg.velocity contain arrays of joint data
     for i = 1, #wheelJoints do
-        sim.setJointTargetVelocity(wheelJoints[i], msg.data[i])
+        -- Use the position or velocity to control the wheels
+        if msg.velocity[i] then
+            sim.setJointTargetVelocity(wheelJoints[i], msg.velocity[i])
+        end
     end
 end
 
--- Handler for joint commands
+-- Handler for joint commands (Using JointState message)
 function jointCmdCallback(msg)
+    -- msg.position, msg.velocity, and msg.effort contain arrays of joint data
     for i = 1, #armJoints do
-        sim.setJointTargetVelocity(armJoints[i], msg.data[i])
+        -- Use position or velocity to control the manipulator
+        if msg.position[i] then
+            sim.setJointTargetPosition(armJoints[i], msg.position[i])
+        end
+        -- If you want to use velocities for control
+        -- if msg.velocity[i] then
+        --     sim.setJointTargetVelocity(armJoints[i], msg.velocity[i])
+        -- end
     end
 end
 

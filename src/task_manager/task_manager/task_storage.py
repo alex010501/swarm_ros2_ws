@@ -1,12 +1,6 @@
 from threading import Lock
-from task_msg.msg import Task, TaskArray
-
-# class Task:
-#     def __init__(self, task_id, trajectory: PointCloud):
-#         self.task_id = task_id
-#         self.trajectory = trajectory
-#         self.status = 0  # 0 - инициализирована, 1 - занята, 2 - выполнена
-
+from geometry_msgs.msg import Point32
+from task_msg.msg import Task
 
 class TaskStorage:
     def __init__(self):
@@ -19,7 +13,12 @@ class TaskStorage:
         with self.lock:
             task = Task()
             task.task_id = f'{self.next_task_id:04}'
-            task.point_cloud = point_cloud
+            start_point = Point32()
+            start_point.x = point_cloud.points[0].x
+            start_point.y = point_cloud.points[0].y
+            start_point.z = 0
+            task.start_point = start_point
+            task.trajectory = point_cloud
             task.status = 0  # 0 - инициализирована
             self.next_task_id += 1
             self.tasks.tasks.append(task)
