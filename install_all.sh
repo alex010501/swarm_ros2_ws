@@ -24,5 +24,11 @@ colcon build --symlink-install --packages-select robot_arm_lib_ros2 task_msg
 source install/setup.bash
 
 # Build all
-colcon build --symlink-install --packages-ignore sim_ros2_interface
+colcon build --symlink-install --packages-ignore sim_ros2_interface all_launch
 source install/setup.bash
+
+# Run 
+colcon build --symlink-install --packages-select all_launch
+source install/setup.bash
+
+ros2 launch all_launch swarm_control.launch.py

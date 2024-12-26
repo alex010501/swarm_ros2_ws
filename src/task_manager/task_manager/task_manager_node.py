@@ -22,9 +22,13 @@ class TaskManagerNode(Node):
         self.task_array_publisher = self.create_publisher(TaskArray, '/robot_tasks', 10)
         self.create_timer(1.0, self.publish_task_array)
 
+        # Визуализация траекторий
+        self.point_cloud_publishers = {}        
+
     def add_task_callback(self, msg: PointCloud):
         """Добавить задачу."""
         task = self.task_storage.add_task(msg)
+        self.traj_publishers[f'/task_{task.task_id}'] = self.create_publisher(PointCloud, f'/task_{task.task_id}', 10)
         self.get_logger().info(f'Added task {task.task_id} with {len(msg.points)} points.')
 
     def update_task_status_callback(self, msg: String):

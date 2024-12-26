@@ -13,7 +13,7 @@
 class ROS_Arm : private RobotArm
 {
 public:
-    ROS_Arm(const std::string &urdf_file_path);
+    ROS_Arm(urdf::Model model);
 
     Eigen::VectorXd solveIK(geometry_msgs::msg::Pose target_pose, Eigen::VectorXd q_init, bool withRotation = false);
 

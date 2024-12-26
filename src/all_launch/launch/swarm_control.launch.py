@@ -1,77 +1,87 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction
-from launch.substitutions import LaunchConfiguration
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, TextSubstitution
 from launch_ros.actions import Node
-from launch_ros.descriptions import ParameterValue
+from ament_index_python.packages import get_package_share_directory
+import os
 
 
 def generate_launch_description():
     # Аргумент для количества роботов
     num_robots_arg = DeclareLaunchArgument(
         'num_robots',
-        default_value='1',
+        default_value='4',
         description='Количество роботов (1-6)'
     )
 
+    # Конфигурация аргументов
     num_robots = LaunchConfiguration('num_robots')
 
-    # Список действий для запуска
-    launch_actions = [num_robots_arg]
+    descr_dir = get_package_share_directory('youbot_description')
+    contr_dir = get_package_share_directory('youbot_control')
+    task_manager_dir = get_package_share_directory('task_manager')
 
-    # Цикл для каждого робота
-    for i in range(1, num_robots + 1):  # Максимум 6 роботов
-        robot_id = f"{i:04d}"
-        namespace = f"/robot_{robot_id}"
+    all_launch_dir = get_package_share_directory('all_launch')
 
-        # Условие запуска роботов согласно num_robots
-        robot_group = GroupAction([
-            Node(
-                package='arm_control',
-                executable='arm_control_node',
-                namespace=namespace,
-                name=f'arm_control_{robot_id}',
-                parameters=[{'robot_id': robot_id}]
-            ),
-            Node(
-                package='cart_control',
-                executable='cart_control_node',
-                namespace=namespace,
-                name=f'cart_control_{robot_id}',
-                parameters=[{'robot_id': robot_id}]
-            ),
-            Node(
-                package='youbot_control',
-                executable='youbot_control_node',
-                namespace=namespace,
-                name=f'youbot_control_{robot_id}',
-                parameters=[{'robot_id': robot_id}]
-            ),
-            Node(
-                package='youbot_description',
-                executable='rviz_launch_node',
-                namespace=namespace,
-                name=f'youbot_description_{robot_id}'
-            ),
-        ])
-        # Добавляем действия в список только если id робота <= num_robots
-        launch_actions.append(
-            GroupAction(actions=robot_group.actions)
+    # Путь к описанию робота (общий URDF)
+    urdf_path = os.path.join(descr_dir, 'urdf', 'youbot.urdf')
+
+    # LaunchDescription
+    ld = LaunchDescription([num_robots_arg])
+
+    # Запускаем ноды для каждого робота
+    def add_robot_launches(context, *args, **kwargs):
+        actions = []
+        num_robots_val = int(num_robots.perform(context))
+
+        for i in range(1, num_robots_val + 1):
+            robot_id = f"{i:04d}"  # Формат ID робота
+
+            # Добавляем запуск пакета youbot_control
+            actions.append(GroupAction([
+                IncludeLaunchDescription(
+                    PythonLaunchDescriptionSource(
+                        os.path.join(contr_dir,'launch', 'youbot_launch.py')
+                    ),
+                    launch_arguments={'robot_id': TextSubstitution(text=robot_id)}.items()
+                ),
+            ]))
+
+            # Добавляем запуск пакета youbot_description
+            actions.append(GroupAction([
+                IncludeLaunchDescription(
+                    PythonLaunchDescriptionSource(
+                        os.path.join(descr_dir, 'launch', 'youbot_description_launch.py')
+                    ),
+                    launch_arguments={
+                        'robot_id': TextSubstitution(text=robot_id),
+                        'urdf_path': TextSubstitution(text=urdf_path)
+                    }.items()
+                ),
+            ]))
+
+        return actions
+
+    # Добавляем роботов через OpaqueFunction
+    from launch.actions import OpaqueFunction
+    ld.add_action(OpaqueFunction(function=add_robot_launches))
+
+    # Добавляем запуск task_manager
+    ld.add_action(IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(task_manager_dir, 'launch', 'task_manager_launch.py')
         )
+    ))
 
-    # Добавление task_manager (единственный экземпляр)
-    launch_actions.append(
-        Node(
-            package='task_manager',
-            executable='task_manager_node',
-            name='task_manager'
-        )
-    )
-    launch_actions.append(
-        Node(
-            package='task_manager',
-            executable='task_cli',
-            name='task_cli'
-        )
-    )
+    # Запускаем RViz
+    rviz_config_path = os.path.join(all_launch_dir, 'rviz', 'swarm.rviz')
+    ld.add_action(Node(
+        package='rviz2',
+        executable='rviz2',
+        arguments=['-d', rviz_config_path],
+        name='rviz2',
+        output='screen'
+    ))
 
-    return LaunchDescription(launch_actions)
+    return ld

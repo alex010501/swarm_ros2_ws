@@ -32,14 +32,14 @@ Eigen::VectorXd ROS_Arm::solveIK(geometry_msgs::msg::Pose target_pose, Eigen::Ve
     }
 }
 
-ROS_Arm::ROS_Arm(const std::string &urdf_path)
+ROS_Arm::ROS_Arm(urdf::Model model)//const std::string &urdf_path)
 {
     // Инициализация модели URDF
-    urdf::Model model;
-    if (!model.initFile(urdf_path))
-    {
-        throw std::runtime_error("Failed to load URDF file.");
-    }
+    // urdf::Model model;
+    // if (!model.initFile(urdf_path))
+    // {
+    //     throw std::runtime_error("Failed to load URDF file.");
+    // }
 
     // Парсинг звеньев
     auto root_link = model.getRoot();

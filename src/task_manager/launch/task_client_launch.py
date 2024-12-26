@@ -6,8 +6,8 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package='task_manager',
-            executable='task_manager_node',
-            name='task_manager',
+            executable='task_cli',
+            name='task_client',
             output='screen',
         ),
     ])

@@ -9,6 +9,8 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <urdf/model.h>
+#include <urdf_parser/urdf_parser.h>
 
 #include <robot_arm_lib_ros2/RobotArmLib_ROS.h>
 
@@ -20,6 +22,8 @@ public:
 private:
     void commandCallback(const geometry_msgs::msg::Pose::SharedPtr msg);
     void jointCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
+
+    urdf::Model getModelByPath(const char* path);
 
     // Robot Arm parameters
     ROS_Arm arm_;

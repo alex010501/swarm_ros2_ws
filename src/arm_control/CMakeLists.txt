@@ -49,8 +49,8 @@ install(TARGETS
 )
 
 # Install launch and config files
-install(DIRECTORY config
-    DESTINATION share/${PROJECT_NAME}/
+install(DIRECTORY urdf
+    DESTINATION lib/${PROJECT_NAME}
 )
 
 ament_package()

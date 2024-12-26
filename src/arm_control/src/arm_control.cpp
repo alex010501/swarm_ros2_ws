@@ -3,7 +3,7 @@
 // Class ArmControl constructor initialization with argument path to URDF
 ArmControl::ArmControl(const rclcpp::NodeOptions &options):
     Node("arm_control", options),
-    arm_(this->get_parameter("urdf_file_path").as_string())
+    arm_(getModelByPath("urdf/youbot_arm.urdf"))
 {
     // Initialize subscribers and publishers
     robot_id = this->get_parameter("robot_id").as_string();
@@ -42,4 +42,15 @@ void ArmControl::jointCallback(const sensor_msgs::msg::JointState::SharedPtr msg
     joint_angles.resize(msg->name.size());
     for (int i = 0; i < msg->name.size(); i++)
         joint_angles[i] = msg->position[i];
+}
+
+urdf::Model ArmControl::getModelByPath(const char* path)
+{
+    urdf::Model model;
+    if (!model.initFile(path))
+    {
+        RCLCPP_ERROR(this->get_logger(), "Failed to load model from path: %s", path);
+        throw std::runtime_error("Failed to load model from path");
+    }
+    return model;
 }
