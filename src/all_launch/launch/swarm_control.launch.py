@@ -74,6 +74,13 @@ def generate_launch_description():
         )
     ))
 
+    # Добавляем запуск task_client
+    ld.add_action(IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(task_manager_dir, 'launch', 'task_client_launch.py')
+        )
+    ))
+
     # Запускаем RViz
     rviz_config_path = os.path.join(all_launch_dir, 'rviz', 'swarm.rviz')
     ld.add_action(Node(

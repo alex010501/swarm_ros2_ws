@@ -14,13 +14,13 @@ def generate_launch_description():
 
     return LaunchDescription([
         robot_id_arg,
-        Node(
-            package='arm_control',
-            executable='arm_control',
-            name='arm_control',
-            parameters=[{'robot_id': robot_id}],
-            output='screen',
-        ),
+        # Node(
+        #     package='arm_control',
+        #     executable='arm_control',
+        #     name='arm_control',
+        #     parameters=[{'robot_id': robot_id}],
+        #     output='screen',
+        # ),
         Node(
             package='cart_control',
             executable='cart_control',
