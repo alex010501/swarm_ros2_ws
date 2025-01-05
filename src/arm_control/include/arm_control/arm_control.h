@@ -17,7 +17,7 @@
 class ArmControl : public rclcpp::Node
 {
 public:
-    ArmControl(const rclcpp::NodeOptions &options);
+    ArmControl();
 
 private:
     void commandCallback(const geometry_msgs::msg::Pose::SharedPtr msg);
@@ -31,6 +31,7 @@ private:
 
     // Robot ID
     std::string robot_id;
+    std::string model_path;
 
     // ROS2 Subscribers and Publishers
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr command_sub_;

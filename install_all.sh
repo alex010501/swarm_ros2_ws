@@ -31,4 +31,5 @@ source install/setup.bash
 colcon build --symlink-install --packages-select all_launch
 source install/setup.bash
 
-ros2 launch all_launch swarm_control.launch.py
+# ros2 launch all_launch swarm_control.launch.py
+ros2 launch youbot_control youbot_launch.py robot_id:='0001'

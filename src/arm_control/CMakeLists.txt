@@ -50,7 +50,7 @@ install(TARGETS
 
 # Install launch and config files
 install(DIRECTORY urdf
-    DESTINATION lib/${PROJECT_NAME}
+    DESTINATION share/${PROJECT_NAME}
 )
 
 ament_package()

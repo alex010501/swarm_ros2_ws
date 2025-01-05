@@ -32,7 +32,12 @@ Eigen::VectorXd ROS_Arm::solveIK(geometry_msgs::msg::Pose target_pose, Eigen::Ve
     }
 }
 
-ROS_Arm::ROS_Arm(urdf::Model model)//const std::string &urdf_path)
+ROS_Arm::ROS_Arm()
+{
+
+}
+
+void ROS_Arm::setModel(urdf::Model model)//const std::string &urdf_path)
 {
     // Инициализация модели URDF
     // urdf::Model model;
@@ -56,10 +61,75 @@ void ROS_Arm::parseLink(urdf::LinkConstSharedPtr link, urdf::JointConstSharedPtr
 {
     if (!link)
         return;
+
+    std::cout << "Link: " << link->name << std::endl;
     
     // If it's the root link, set the zero link
     if (!parent_joint)
-        setLinkZero(link);
+    {
+        Offset origin;
+        origin.x = 0;
+        origin.y = 0;
+        origin.z = 0;
+        Offset end_offset;
+        Axes axis;
+        for (const auto &child_joint : link->child_joints)
+        {
+            auto joint = child_joint;
+            if (!joint)
+                continue;
+
+            if (joint->type == urdf::Joint::FIXED)
+                continue;
+
+            // Determine the end offset, axis, and joint type
+            end_offset = extractOffset(joint->parent_to_joint_origin_transform);
+            axis = determineAxis(joint->axis);
+            this->SetZeroLink(origin, end_offset, axis);
+            break;
+        }
+    }
+    else
+    {
+        // Get the parent joint bound upper and lower
+        double bound_upper = M_PI;
+        double bound_lower = -M_PI;
+        MoveType joint_type = determineMoveType(parent_joint);
+
+        for (const auto &child_joint : link->child_joints)
+        {
+            auto joint = child_joint;
+            if (!joint)
+                continue;
+            
+            if (joint->type == urdf::Joint::FIXED)
+                continue;
+            
+            // Get the child link name
+            const std::string& child_link_name = joint->child_link_name;
+
+            // Find the child link
+            urdf::LinkConstSharedPtr child_link = model.getLink(child_link_name);
+            if (!child_link) {
+                throw std::runtime_error("Failed to find child link: " + child_link_name);
+            }
+
+            // Determine the end offset, axis, and joint type
+            Offset end_offset = extractOffset(joint->parent_to_joint_origin_transform);
+            Axes axis = determineAxis(joint->axis);
+
+            // Add the link
+            AddLink(end_offset, axis, joint_type, bound_upper, bound_lower);
+
+            // Recursively parse the child link
+            std::cout << "Child link: " << child_link->name << std::endl;
+            parseLink(child_link, joint, model);
+        }
+    }
+
+
+
+    std::cout << "Parent joint: " << link->parent_joint->name << std::endl;
 
     // Get the parent joint bound upper and lower
     double bound_upper = link->parent_joint ? link->parent_joint->limits->upper : 0.0;
@@ -81,7 +151,6 @@ void ROS_Arm::parseLink(urdf::LinkConstSharedPtr link, urdf::JointConstSharedPtr
             throw std::runtime_error("Failed to find child link: " + child_link_name);
         }
 
-
         // Determine the end offset, axis, and joint type
         Offset end_offset = extractOffset(joint->parent_to_joint_origin_transform);
         Axes axis = determineAxis(joint->axis);
@@ -90,6 +159,7 @@ void ROS_Arm::parseLink(urdf::LinkConstSharedPtr link, urdf::JointConstSharedPtr
         AddLink(end_offset, axis, joint_type, bound_upper, bound_lower);
 
         // Recursively parse the child link
+        std::cout << "Child link: " << child_link->name << std::endl;
         parseLink(child_link, joint, model);
     }
 }
@@ -105,12 +175,15 @@ Offset ROS_Arm::extractOffset(const urdf::Pose &pose)
 
 Axes ROS_Arm::determineAxis(const urdf::Vector3 &axis)
 {
+    std::cout << "axis: " << axis.x << " " << axis.y << " " << axis.z << std::endl;
     if (axis.x > 0.99)
         return Axes::X_Axis;
     if (axis.y > 0.99)
         return Axes::Y_Axis;
     if (axis.z > 0.99)
         return Axes::Z_Axis;
+    if (axis.x == 0 && axis.y == 0 && axis.z == 0)
+        return Axes::NoneAxis;
     throw std::runtime_error("Unsupported joint axis direction.");
 }
 
@@ -141,9 +214,41 @@ void ROS_Arm::setLinkZero(urdf::LinkConstSharedPtr link)
         if (!joint)
             continue;
 
+        if (joint->type == urdf::Joint::FIXED)
+            continue;
+
         // Determine the end offset, axis, and joint type
         end_offset = extractOffset(joint->parent_to_joint_origin_transform);
         axis = determineAxis(joint->axis);
+        this->SetZeroLink(origin, end_offset, axis);
+        break;
     }
-    this->SetZeroLink(origin, end_offset, axis);
+    std::cout << "Zero link: " << link->name << std::endl;
+}
+
+void ROS_Arm::insertLink
+{
+    Offset link_end;
+
+    for (const auto &child_joint : link->child_joints)
+    {
+        auto joint = child_joint;
+        if (!joint)
+            continue;
+
+        if (joint->type == urdf::Joint::FIXED)
+            continue;
+
+        // Determine the end offset, axis, and joint type
+        end_offset = extractOffset(joint->parent_to_joint_origin_transform);
+        axis = determineAxis(joint->axis);
+        this->SetZeroLink(origin, end_offset, axis);
+        break;
+    }
+
+    Axes link_axis;
+    MoveType joint_type;
+    double bound_upper;
+    double bound_lower;
+    this->AddLink()
 }

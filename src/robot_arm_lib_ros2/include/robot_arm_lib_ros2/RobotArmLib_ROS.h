@@ -13,7 +13,9 @@
 class ROS_Arm : private RobotArm
 {
 public:
-    ROS_Arm(urdf::Model model);
+    ROS_Arm();
+
+    void setModel(urdf::Model model);
 
     Eigen::VectorXd solveIK(geometry_msgs::msg::Pose target_pose, Eigen::VectorXd q_init, bool withRotation = false);
 
@@ -26,5 +28,7 @@ private:
 
     MoveType determineMoveType(urdf::JointConstSharedPtr joint);
 
-    void setLinkZero(urdf::LinkConstSharedPtr link);    
+    void setLinkZero(urdf::LinkConstSharedPtr link);
+
+    // void insertLink
 };
